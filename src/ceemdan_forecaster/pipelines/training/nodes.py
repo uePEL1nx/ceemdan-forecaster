@@ -227,17 +227,25 @@ def train_single_informer(
             batch_x_mark = batch_x_mark.to(device)
             batch_y_mark = batch_y_mark.to(device)
 
+            # CRITICAL: Mask future values in decoder input to prevent look-ahead bias
+            # Official Informer implementation zeros out the pred_len portion
+            # dec_inp = [label_len known values | pred_len zeros]
+            dec_inp = torch.zeros(
+                [batch_y.shape[0], pred_len, batch_y.shape[-1]], device=device
+            )
+            dec_inp = torch.cat([batch_y[:, :label_len, :], dec_inp], dim=1)
+
             optimizer.zero_grad()
 
             if scaler:
                 with torch.amp.autocast("cuda"):
-                    outputs = model(batch_x, batch_x_mark, batch_y, batch_y_mark)
+                    outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     loss = criterion(outputs, batch_y[:, -pred_len:, :])
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                outputs = model(batch_x, batch_x_mark, batch_y, batch_y_mark)
+                outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 loss = criterion(outputs, batch_y[:, -pred_len:, :])
                 loss.backward()
                 optimizer.step()
@@ -254,7 +262,13 @@ def train_single_informer(
                 batch_x_mark = batch_x_mark.to(device)
                 batch_y_mark = batch_y_mark.to(device)
 
-                outputs = model(batch_x, batch_x_mark, batch_y, batch_y_mark)
+                # CRITICAL: Mask future values in decoder input (same as training)
+                dec_inp = torch.zeros(
+                    [batch_y.shape[0], pred_len, batch_y.shape[-1]], device=device
+                )
+                dec_inp = torch.cat([batch_y[:, :label_len, :], dec_inp], dim=1)
+
+                outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 loss = criterion(outputs, batch_y[:, -pred_len:, :])
                 val_losses.append(loss.item())
 

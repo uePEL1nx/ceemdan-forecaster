@@ -5,7 +5,7 @@ This module provides the main Gradio application interface for:
 - Configuring pipeline parameters
 - Applying presets
 - Running the Kedro pipeline
-- Viewing MLflow results
+- Viewing MLflow results and charts
 """
 import gradio as gr
 from pathlib import Path
@@ -14,6 +14,7 @@ from .config_manager import ConfigManager
 from .presets import PRESETS, apply_preset, PRESET_DESCRIPTIONS
 from .pipeline_runner import PipelineRunner
 from .mlflow_client import MLflowClient
+from .charts import load_equity_curve, create_equity_chart, create_empty_chart
 
 
 # Initialize components (will be created when app starts)
@@ -167,15 +168,28 @@ def save_config(
     return "Configuration saved to conf/base/parameters.yml"
 
 
+def refresh_equity_chart():
+    """Load and create equity curve chart."""
+    data_dir = Path(__file__).parent.parent / "data"
+    df = load_equity_curve(data_dir)
+    if df is None:
+        return create_empty_chart()
+    return create_equity_chart(df)
+
+
 def run_pipeline_handler():
-    """Run the pipeline and stream output."""
+    """Run the pipeline and stream output, then refresh charts."""
     if runner is None:
         init_components()
 
     output = ""
     for line in runner.run():
         output += line + "\n"
+        # During pipeline execution, just update log
         yield output
+
+    # After completion, the log is finalized
+    yield output
 
 
 def cancel_pipeline_handler():
@@ -193,6 +207,13 @@ def get_results_handler():
     return mlflow_client.format_metrics(result)
 
 
+def refresh_all_results():
+    """Refresh both metrics and chart."""
+    metrics = get_results_handler()
+    chart = refresh_equity_chart()
+    return metrics, chart
+
+
 def create_app():
     """Create the Gradio application."""
     init_components()
@@ -201,137 +222,150 @@ def create_app():
         gr.Markdown("# CEEMDAN-Informer-LSTM Pipeline")
         gr.Markdown("Configure parameters, run the pipeline, and view results.")
 
-        # Status bar
-        status_text = gr.Textbox(
-            label="Status",
-            value="Ready",
-            interactive=False,
-            max_lines=1,
-        )
-
-        # Preset buttons
-        gr.Markdown("### Presets")
-        with gr.Row():
-            btn_quick = gr.Button(
-                "Quick Test (~15 min)",
-                variant="secondary",
-                elem_classes=["preset-btn"]
-            )
-            btn_standard = gr.Button(
-                "Standard (~1 hour)",
-                variant="secondary",
-                elem_classes=["preset-btn"]
-            )
-            btn_production = gr.Button(
-                "Production (~2.5 hours)",
-                variant="primary",
-                elem_classes=["preset-btn"]
-            )
-            btn_load = gr.Button(
-                "Load Current",
-                variant="secondary",
-                elem_classes=["preset-btn"]
-            )
-
-        # Main parameters (always visible)
-        gr.Markdown("### Main Parameters")
-        with gr.Group():
-            with gr.Row():
-                data_path = gr.Textbox(
-                    label="Data Source Path",
-                    scale=3,
-                    placeholder="C:/Users/jd/LTSM/data/raw/file.csv"
-                )
-            with gr.Row():
-                train_ratio = gr.Number(label="Train Ratio", value=0.80, precision=2, minimum=0.5, maximum=0.95)
-                val_ratio = gr.Number(label="Val Ratio", value=0.10, precision=2, minimum=0.05, maximum=0.25)
-                test_ratio = gr.Number(label="Test Ratio", value=0.10, precision=2, minimum=0.05, maximum=0.25)
-            with gr.Row():
-                n_models = gr.Number(label="Ensemble Models", value=50, precision=0, minimum=1, maximum=100)
-                device = gr.Dropdown(
-                    label="Device",
-                    choices=["auto", "cuda", "cpu"],
-                    value="auto"
-                )
-
-        # CEEMDAN Accordion
-        with gr.Accordion("CEEMDAN Parameters", open=False):
-            with gr.Row():
-                ceemdan_trials = gr.Number(label="Trials", value=100, precision=0, minimum=10, maximum=500)
-                ceemdan_epsilon = gr.Number(label="Epsilon", value=0.005, precision=4, minimum=0.001, maximum=0.1)
-                ceemdan_max_imf = gr.Number(label="Max IMF (-1=auto)", value=-1, precision=0, minimum=-1, maximum=20)
-
-        # Informer Accordion
-        with gr.Accordion("Informer Parameters (H-IMF)", open=False):
-            with gr.Row():
-                inf_seq_len = gr.Number(label="Sequence Length", value=96, precision=0, minimum=24, maximum=512)
-                inf_label_len = gr.Number(label="Label Length", value=48, precision=0, minimum=12, maximum=256)
-                inf_d_model = gr.Number(label="d_model", value=256, precision=0, minimum=32, maximum=1024)
-                inf_n_heads = gr.Number(label="Attention Heads", value=8, precision=0, minimum=1, maximum=16)
-            with gr.Row():
-                inf_e_layers = gr.Number(label="Encoder Layers", value=2, precision=0, minimum=1, maximum=6)
-                inf_dropout = gr.Number(label="Dropout", value=0.05, precision=2, minimum=0.0, maximum=0.5)
-                inf_epochs = gr.Number(label="Epochs", value=10, precision=0, minimum=1, maximum=100)
-            with gr.Row():
-                inf_lr = gr.Number(label="Learning Rate", value=0.0001, precision=6, minimum=0.000001, maximum=0.01)
-                inf_patience = gr.Number(label="Early Stop Patience", value=3, precision=0, minimum=1, maximum=20)
-
-        # LSTM Accordion
-        with gr.Accordion("LSTM Parameters (L-IMF)", open=False):
-            with gr.Row():
-                lstm_look_back = gr.Number(label="Look Back", value=20, precision=0, minimum=5, maximum=100)
-                lstm_hidden = gr.Number(label="Hidden Size", value=4, precision=0, minimum=1, maximum=256)
-                lstm_layers = gr.Number(label="Num Layers", value=1, precision=0, minimum=1, maximum=4)
-            with gr.Row():
-                lstm_dropout = gr.Number(label="Dropout", value=0.1, precision=2, minimum=0.0, maximum=0.5)
-                lstm_epochs = gr.Number(label="Epochs", value=100, precision=0, minimum=1, maximum=500)
-            with gr.Row():
-                lstm_lr = gr.Number(label="Learning Rate", value=0.001, precision=6, minimum=0.000001, maximum=0.1)
-                lstm_patience = gr.Number(label="Early Stop Patience", value=10, precision=0, minimum=1, maximum=50)
-
-        # Backtest Accordion
-        with gr.Accordion("Backtest Parameters", open=False):
-            with gr.Row():
-                bt_cost = gr.Number(label="Transaction Cost", value=0.001, precision=4, minimum=0.0, maximum=0.01)
-                bt_capital = gr.Number(label="Initial Capital", value=100000, precision=0, minimum=1000, maximum=10000000)
-            with gr.Row():
-                bt_threshold = gr.Number(label="Signal Threshold", value=0.0, precision=4, minimum=-100, maximum=100)
-                bt_timing = gr.Dropdown(
-                    label="Execution Timing",
-                    choices=["close", "next_open"],
-                    value="close"
-                )
-
-        # Action buttons
-        gr.Markdown("---")
-        with gr.Row():
-            btn_run = gr.Button(
-                "Run Pipeline",
-                variant="primary",
-                scale=2,
-                elem_classes=["run-btn"]
-            )
-            btn_cancel = gr.Button("Cancel", variant="stop")
-            btn_save = gr.Button("Save Config", variant="secondary")
-
-        # Execution log
-        with gr.Accordion("Execution Log", open=True):
-            log_output = gr.Textbox(
-                label="Pipeline Output",
-                lines=15,
-                max_lines=30,
-                interactive=False,
-            )
-
-        # Results
-        with gr.Accordion("Results", open=True):
-            with gr.Row():
-                results_text = gr.Textbox(
-                    label="Latest Run Metrics",
-                    lines=15,
+        with gr.Tabs():
+            # ===== CONFIGURATION TAB =====
+            with gr.TabItem("Configuration"):
+                # Status bar
+                status_text = gr.Textbox(
+                    label="Status",
+                    value="Ready",
                     interactive=False,
+                    max_lines=1,
                 )
-            btn_refresh = gr.Button("Refresh Results")
+
+                # Preset buttons
+                gr.Markdown("### Presets")
+                with gr.Row():
+                    btn_quick = gr.Button(
+                        "Quick Test (~15 min)",
+                        variant="secondary",
+                        elem_classes=["preset-btn"]
+                    )
+                    btn_standard = gr.Button(
+                        "Standard (~1 hour)",
+                        variant="secondary",
+                        elem_classes=["preset-btn"]
+                    )
+                    btn_production = gr.Button(
+                        "Production (~2.5 hours)",
+                        variant="primary",
+                        elem_classes=["preset-btn"]
+                    )
+                    btn_load = gr.Button(
+                        "Load Current",
+                        variant="secondary",
+                        elem_classes=["preset-btn"]
+                    )
+
+                # Main parameters (always visible)
+                gr.Markdown("### Main Parameters")
+                with gr.Group():
+                    with gr.Row():
+                        data_path = gr.Textbox(
+                            label="Data Source Path",
+                            scale=3,
+                            placeholder="C:/Users/jd/LTSM/data/raw/file.csv"
+                        )
+                    with gr.Row():
+                        train_ratio = gr.Number(label="Train Ratio", value=0.80, precision=2, minimum=0.5, maximum=0.95)
+                        val_ratio = gr.Number(label="Val Ratio", value=0.10, precision=2, minimum=0.05, maximum=0.25)
+                        test_ratio = gr.Number(label="Test Ratio", value=0.10, precision=2, minimum=0.05, maximum=0.25)
+                    with gr.Row():
+                        n_models = gr.Number(label="Ensemble Models", value=50, precision=0, minimum=1, maximum=100)
+                        device = gr.Dropdown(
+                            label="Device",
+                            choices=["auto", "cuda", "cpu"],
+                            value="auto"
+                        )
+
+                # CEEMDAN Accordion
+                with gr.Accordion("CEEMDAN Parameters", open=False):
+                    with gr.Row():
+                        ceemdan_trials = gr.Number(label="Trials", value=100, precision=0, minimum=10, maximum=500)
+                        ceemdan_epsilon = gr.Number(label="Epsilon", value=0.005, precision=4, minimum=0.001, maximum=0.1)
+                        ceemdan_max_imf = gr.Number(label="Max IMF (-1=auto)", value=-1, precision=0, minimum=-1, maximum=20)
+
+                # Informer Accordion
+                with gr.Accordion("Informer Parameters (H-IMF)", open=False):
+                    with gr.Row():
+                        inf_seq_len = gr.Number(label="Sequence Length", value=96, precision=0, minimum=24, maximum=512)
+                        inf_label_len = gr.Number(label="Label Length", value=48, precision=0, minimum=12, maximum=256)
+                        inf_d_model = gr.Number(label="d_model", value=256, precision=0, minimum=32, maximum=1024)
+                        inf_n_heads = gr.Number(label="Attention Heads", value=8, precision=0, minimum=1, maximum=16)
+                    with gr.Row():
+                        inf_e_layers = gr.Number(label="Encoder Layers", value=2, precision=0, minimum=1, maximum=6)
+                        inf_dropout = gr.Number(label="Dropout", value=0.05, precision=2, minimum=0.0, maximum=0.5)
+                        inf_epochs = gr.Number(label="Epochs", value=10, precision=0, minimum=1, maximum=100)
+                    with gr.Row():
+                        inf_lr = gr.Number(label="Learning Rate", value=0.0001, precision=6, minimum=0.000001, maximum=0.01)
+                        inf_patience = gr.Number(label="Early Stop Patience", value=3, precision=0, minimum=1, maximum=20)
+
+                # LSTM Accordion
+                with gr.Accordion("LSTM Parameters (L-IMF)", open=False):
+                    with gr.Row():
+                        lstm_look_back = gr.Number(label="Look Back", value=20, precision=0, minimum=5, maximum=100)
+                        lstm_hidden = gr.Number(label="Hidden Size", value=4, precision=0, minimum=1, maximum=256)
+                        lstm_layers = gr.Number(label="Num Layers", value=1, precision=0, minimum=1, maximum=4)
+                    with gr.Row():
+                        lstm_dropout = gr.Number(label="Dropout", value=0.1, precision=2, minimum=0.0, maximum=0.5)
+                        lstm_epochs = gr.Number(label="Epochs", value=100, precision=0, minimum=1, maximum=500)
+                    with gr.Row():
+                        lstm_lr = gr.Number(label="Learning Rate", value=0.001, precision=6, minimum=0.000001, maximum=0.1)
+                        lstm_patience = gr.Number(label="Early Stop Patience", value=10, precision=0, minimum=1, maximum=50)
+
+                # Backtest Accordion
+                with gr.Accordion("Backtest Parameters", open=False):
+                    with gr.Row():
+                        bt_cost = gr.Number(label="Transaction Cost", value=0.001, precision=4, minimum=0.0, maximum=0.01)
+                        bt_capital = gr.Number(label="Initial Capital", value=100000, precision=0, minimum=1000, maximum=10000000)
+                    with gr.Row():
+                        bt_threshold = gr.Number(label="Signal Threshold", value=0.0, precision=4, minimum=-100, maximum=100)
+                        bt_timing = gr.Dropdown(
+                            label="Execution Timing",
+                            choices=["close", "next_open"],
+                            value="close"
+                        )
+
+                # Action buttons
+                gr.Markdown("---")
+                with gr.Row():
+                    btn_run = gr.Button(
+                        "Run Pipeline",
+                        variant="primary",
+                        scale=2,
+                        elem_classes=["run-btn"]
+                    )
+                    btn_cancel = gr.Button("Cancel", variant="stop")
+                    btn_save = gr.Button("Save Config", variant="secondary")
+
+                # Execution log
+                with gr.Accordion("Execution Log", open=True):
+                    log_output = gr.Textbox(
+                        label="Pipeline Output",
+                        lines=15,
+                        max_lines=30,
+                        interactive=False,
+                    )
+
+            # ===== RESULTS TAB =====
+            with gr.TabItem("Results"):
+                with gr.Row():
+                    btn_refresh = gr.Button("Refresh Results", variant="primary")
+                    gr.Markdown("*Results auto-refresh after pipeline completion*")
+
+                with gr.Tabs():
+                    with gr.TabItem("Metrics"):
+                        results_text = gr.Textbox(
+                            label="Latest Run Metrics (from MLflow)",
+                            lines=20,
+                            interactive=False,
+                        )
+
+                    with gr.TabItem("Equity Curve"):
+                        equity_chart = gr.Plot(
+                            label="Strategy vs Buy & Hold",
+                            show_label=True
+                        )
 
         # Collect all input components for save/load
         all_inputs = [
@@ -369,12 +403,21 @@ def create_app():
         btn_save.click(fn=save_config, inputs=all_inputs, outputs=status_text)
         btn_run.click(fn=run_pipeline_handler, outputs=log_output)
         btn_cancel.click(fn=cancel_pipeline_handler, outputs=status_text)
-        btn_refresh.click(fn=get_results_handler, outputs=results_text)
 
-        # Load current config on startup
+        # Wire up results refresh
+        btn_refresh.click(
+            fn=refresh_all_results,
+            outputs=[results_text, equity_chart]
+        )
+
+        # Load current config and initial chart on startup
         app.load(
             fn=lambda: extract_ui_values(load_current_config()) + ("Ready",),
             outputs=all_outputs_with_status
+        )
+        app.load(
+            fn=refresh_equity_chart,
+            outputs=equity_chart
         )
 
     return app

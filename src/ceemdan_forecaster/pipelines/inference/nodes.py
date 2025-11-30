@@ -39,7 +39,16 @@ def get_device() -> torch.device:
 
 
 class InformerDataset(Dataset):
-    """Dataset for Informer model inference."""
+    """Dataset for Informer model inference.
+
+    CRITICAL: During inference, we must NOT pass the actual future values
+    to the decoder. The decoder input (seq_y) should have:
+    - label_len known historical values (for teacher forcing context)
+    - pred_len ZEROS (masked future values - model must predict these)
+
+    This prevents look-ahead bias where the model could "cheat" by
+    seeing the actual values it's supposed to predict.
+    """
 
     def __init__(
         self,
@@ -59,9 +68,15 @@ class InformerDataset(Dataset):
 
     def __getitem__(self, idx):
         seq_x = self.data[idx : idx + self.seq_len]
+
+        # Decoder input: label_len known values + pred_len ZEROS
+        # This prevents look-ahead bias during inference
         s_begin = idx + self.seq_len - self.label_len
-        s_end = idx + self.seq_len + self.pred_len
-        seq_y = self.data[s_begin:s_end]
+        s_end = idx + self.seq_len  # Only up to known data, NOT including future
+        label_part = self.data[s_begin:s_end]  # label_len known values
+
+        # Mask future values with zeros - model must predict these
+        seq_y = np.concatenate([label_part, np.zeros(self.pred_len)])
 
         seq_x_mark = np.zeros((self.seq_len, 4))
         seq_y_mark = np.zeros((self.label_len + self.pred_len, 4))
