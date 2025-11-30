@@ -1,0 +1,17 @@
+# ============================================================
+# Standard Configuration (~1 hour)
+# ============================================================
+# Use: kedro run --env=standard
+# Models: 180 total (9 IMFs x 20 seeds)
+
+ensemble:
+  n_models: 20
+
+ceemdan:
+  trials: 50
+
+informer:
+  epochs: 7
+
+lstm:
+  epochs: 50

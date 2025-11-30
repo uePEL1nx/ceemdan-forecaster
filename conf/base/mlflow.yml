@@ -1,0 +1,27 @@
+# ============================================================
+# MLflow Configuration for CEEMDAN-Informer-LSTM Pipeline
+# ============================================================
+# Documentation: https://kedro-mlflow.readthedocs.io/
+
+server:
+  mlflow_tracking_uri: mlruns
+
+tracking:
+  experiment:
+    name: ceemdan_forecaster
+  run:
+    id: null  # Auto-generated
+    name: null  # Auto-generated based on timestamp
+
+  params:
+    dict_params:
+      flatten: true
+      recursive: true
+      sep: "."
+    long_params_strategy: truncate
+
+  disable_tracking:
+    pipelines: []
+
+ui:
+  port: "5000"

@@ -1,0 +1,18 @@
+# ============================================================
+# Production Configuration (~2.5 hours)
+# Full paper methodology
+# ============================================================
+# Use: kedro run --env=production
+# Models: 450 total (9 IMFs x 50 seeds)
+
+ensemble:
+  n_models: 50
+
+ceemdan:
+  trials: 100
+
+informer:
+  epochs: 10
+
+lstm:
+  epochs: 100

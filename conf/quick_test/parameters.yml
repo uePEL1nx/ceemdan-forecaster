@@ -1,0 +1,17 @@
+# ============================================================
+# Quick Test Configuration (~15 minutes)
+# ============================================================
+# Use: kedro run --env=quick_test
+# Models: 45 total (9 IMFs x 5 seeds)
+
+ensemble:
+  n_models: 5
+
+ceemdan:
+  trials: 20
+
+informer:
+  epochs: 3
+
+lstm:
+  epochs: 20

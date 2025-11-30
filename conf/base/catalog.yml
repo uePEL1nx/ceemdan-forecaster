@@ -1,0 +1,116 @@
+# ============================================================
+# CEEMDAN-Informer-LSTM Data Catalog
+# ============================================================
+# Documentation: https://docs.kedro.org/en/stable/data/data_catalog.html
+
+# =============================================================================
+# Layer 01: Raw Data
+# =============================================================================
+raw_csv:
+  type: pandas.CSVDataset
+  filepath: ../data/raw/$RUI_ATR_maxVol_75.csv
+  load_args:
+    encoding: utf-8
+
+# =============================================================================
+# Layer 02: Intermediate Data
+# =============================================================================
+raw_data:
+  type: pickle.PickleDataset
+  filepath: data/02_intermediate/raw_data.pkl
+
+# =============================================================================
+# Layer 03: Primary Data (Splits)
+# =============================================================================
+split_data:
+  type: pickle.PickleDataset
+  filepath: data/03_primary/split_data.pkl
+  versioned: true
+
+# =============================================================================
+# Layer 04: Feature Data (Decomposition & Classification)
+# =============================================================================
+train_decomposition:
+  type: pickle.PickleDataset
+  filepath: data/04_feature/train_decomposition.pkl
+  versioned: true
+
+val_test_decomposition:
+  type: pickle.PickleDataset
+  filepath: data/04_feature/val_test_decomposition.pkl
+  versioned: true
+
+decomposer:
+  type: pickle.PickleDataset
+  filepath: data/04_feature/decomposer.pkl
+  versioned: true
+
+classification:
+  type: pickle.PickleDataset
+  filepath: data/04_feature/classification.pkl
+  versioned: true
+
+# =============================================================================
+# Layer 05: Model Input (Normalized)
+# =============================================================================
+normalizers:
+  type: pickle.PickleDataset
+  filepath: data/05_model_input/normalizers.pkl
+  versioned: true
+
+normalized_data:
+  type: pickle.PickleDataset
+  filepath: data/05_model_input/normalized_data.pkl
+  versioned: true
+
+# =============================================================================
+# Layer 06: Models (Checkpoints)
+# =============================================================================
+# Note: All model state_dicts stored in a single pickle file
+# Contains: informer (H-IMF), lstm (L-IMF), residual models
+
+trained_models:
+  type: pickle.PickleDataset
+  filepath: data/06_models/trained_models.pkl
+  versioned: true
+
+ensemble_checkpoints:
+  type: pickle.PickleDataset
+  filepath: data/06_models/ensemble_checkpoints.pkl
+  versioned: true
+
+# =============================================================================
+# Layer 07: Model Output (Predictions)
+# =============================================================================
+component_predictions:
+  type: pickle.PickleDataset
+  filepath: data/07_model_output/component_predictions.pkl
+  versioned: true
+
+predictions:
+  type: pickle.PickleDataset
+  filepath: data/07_model_output/predictions.pkl
+  versioned: true
+
+# =============================================================================
+# Layer 08: Reporting (Metrics & Results)
+# =============================================================================
+signal_data:
+  type: pickle.PickleDataset
+  filepath: data/08_reporting/signal_data.pkl
+
+evaluation_metrics:
+  type: json.JSONDataset
+  filepath: data/08_reporting/evaluation_metrics.json
+
+backtest_results:
+  type: pickle.PickleDataset
+  filepath: data/08_reporting/backtest_results.pkl
+
+backtest_metrics:
+  type: json.JSONDataset
+  filepath: data/08_reporting/backtest_metrics.json
+
+equity_curve:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/equity_curve.csv

@@ -1,0 +1,68 @@
+# ============================================================
+# CEEMDAN-Informer-LSTM Pipeline Parameters
+# Based on Li et al. (2024) methodology
+# ============================================================
+
+data_source:
+  type: csv
+  path: C:/Users/jd/LTSM/data/raw/$RUI_ATR_maxVol_75.csv
+  date_column: Date
+  value_column: Price
+  open_column: Open
+  encoding: utf-8
+data_split:
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+  strict_separation: true
+ceemdan:
+  trials: 20
+  epsilon: 0.005
+  max_imf: -1
+ttest:
+  alpha: 0.1
+informer:
+  seq_len: 96
+  label_len: 48
+  pred_len: 1
+  d_model: 256
+  d_ff: 512
+  n_heads: 8
+  e_layers: 2
+  d_layers: 1
+  dropout: 0.05
+  attn: prob
+  embed: fixed
+  activation: gelu
+  batch_size: 64
+  epochs: 3
+  learning_rate: 0.0001
+  patience: 2
+  use_amp: true
+lstm:
+  look_back: 20
+  pred_len: 1
+  hidden_size: 4
+  num_layers: 1
+  dropout: 0.1
+  batch_size: 128
+  epochs: 20
+  learning_rate: 0.001
+  patience: 5
+  use_amp: true
+ensemble:
+  n_models: 5
+horizons:
+- 1
+- 5
+- 21
+- 120
+backtest:
+  transaction_cost: 0.001
+  initial_capital: 100000
+  signal_threshold: 0.0
+  execution_timing: close
+runtime:
+  device: auto
+  num_workers: 0
+  random_seed: 42
