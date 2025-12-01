@@ -15,6 +15,7 @@ Targets from paper:
 import logging
 from typing import Any, Dict
 
+import mlflow
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -158,5 +159,16 @@ def calculate_metrics(predictions: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("ALL TARGETS MET!")
     else:
         logger.info("Some targets not met - see metrics for details")
+
+    # Log metrics to MLflow
+    try:
+        mlflow.log_metric("MAE", mae)
+        mlflow.log_metric("RMSE", rmse)
+        mlflow.log_metric("MAPE", mape)
+        mlflow.log_metric("R2", r2)
+        mlflow.log_metric("n_samples", n_samples)
+        logger.info("Evaluation metrics logged to MLflow")
+    except Exception as e:
+        logger.warning(f"Could not log metrics to MLflow: {e}")
 
     return metrics

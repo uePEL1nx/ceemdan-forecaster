@@ -26,6 +26,7 @@ Performance metrics calculated:
 import logging
 from typing import Any, Dict, Tuple
 
+import mlflow
 import numpy as np
 import pandas as pd
 
@@ -336,6 +337,21 @@ def run_backtest(
         "initial_capital": initial_capital,
         "final_equity": float(strategy_equity[-1]),
     }
+
+    # Log metrics to MLflow
+    try:
+        mlflow.log_metric("total_return", metrics["total_return"])
+        mlflow.log_metric("sharpe_ratio", metrics["sharpe_ratio"])
+        mlflow.log_metric("max_drawdown", metrics["max_drawdown"])
+        mlflow.log_metric("win_rate", metrics["win_rate"])
+        mlflow.log_metric("annual_return", metrics["annual_return"])
+        mlflow.log_metric("calmar_ratio", metrics["calmar_ratio"])
+        mlflow.log_metric("profit_factor", metrics["profit_factor"])
+        mlflow.log_metric("total_trades", metrics["total_trades"])
+        mlflow.log_metric("buyhold_return", metrics["buyhold_return"])
+        logger.info("Backtest metrics logged to MLflow")
+    except Exception as e:
+        logger.warning(f"Could not log backtest metrics to MLflow: {e}")
 
     return backtest_results, backtest_metrics, equity_df
 

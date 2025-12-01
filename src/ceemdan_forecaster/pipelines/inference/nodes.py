@@ -520,11 +520,20 @@ def reconstruct_predictions(
         open_prices_aligned = test_open_prices[offset:offset + min_len]
         logger.info(f"Open prices aligned: {len(open_prices_aligned)} samples")
 
+    # Align test_dates with predictions (same offset as actual values)
+    test_dates = normalized_data.get("test_dates")
+    test_dates_aligned = None
+    if test_dates is not None and len(test_dates) > offset:
+        test_dates_aligned = test_dates[offset:offset + min_len]
+        logger.info(f"Test dates aligned: {len(test_dates_aligned)} samples")
+        if len(test_dates_aligned) > 0:
+            logger.info(f"Date range: {test_dates_aligned[0]} to {test_dates_aligned[-1]}")
+
     return {
         "predictions": denorm_predictions,
         "actual": actual_aligned,
         "open_prices": open_prices_aligned,  # For backtest execution timing
-        "test_dates": normalized_data.get("test_dates"),
+        "test_dates": test_dates_aligned,  # Aligned with predictions
         "n_samples": min_len,
         "offset": offset,
     }

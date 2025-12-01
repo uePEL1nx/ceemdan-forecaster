@@ -5,8 +5,9 @@ This module provides functions to load data and create interactive
 Plotly charts for displaying pipeline results.
 """
 import pandas as pd
+import yaml
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Tuple
 
 try:
     import plotly.graph_objects as go
@@ -15,31 +16,73 @@ except ImportError:
     PLOTLY_AVAILABLE = False
 
 
-def load_equity_curve(data_dir: Path) -> Optional[pd.DataFrame]:
+def get_instrument_name(config_dir: Path) -> str:
+    """Extract instrument name from parameters.yml.
+
+    Args:
+        config_dir: Path to the conf directory.
+
+    Returns:
+        Instrument name extracted from data source path, or 'Unknown' if not found.
+    """
+    params_path = config_dir / "base" / "parameters.yml"
+    if not params_path.exists():
+        return "Unknown"
+
+    try:
+        with open(params_path, "r") as f:
+            params = yaml.safe_load(f)
+        data_path = params.get("data_source", {}).get("path", "")
+        if data_path:
+            # Extract filename without extension
+            filename = Path(data_path).stem
+            # Clean up the name (remove $ prefix if present)
+            return filename.replace("$", "").replace("_", " ")
+        return "Unknown"
+    except Exception:
+        return "Unknown"
+
+
+def load_equity_curve(data_dir: Path) -> Tuple[Optional[pd.DataFrame], str]:
     """Load equity curve CSV from data directory.
 
     Args:
         data_dir: Path to the data directory containing 08_reporting folder.
 
     Returns:
-        DataFrame with equity curve data, or None if file doesn't exist.
+        Tuple of (DataFrame with equity curve data, instrument name).
+        DataFrame is None if file doesn't exist.
     """
     csv_path = data_dir / "08_reporting" / "equity_curve.csv"
+
+    # Get instrument name from config
+    config_dir = data_dir.parent / "conf"
+    instrument_name = get_instrument_name(config_dir)
+
     if not csv_path.exists():
-        return None
+        return None, instrument_name
     try:
-        return pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path)
+        # Convert date column to datetime if it exists
+        if 'date' in df.columns:
+            # Try to parse dates - they might be indices or actual dates
+            try:
+                df['date'] = pd.to_datetime(df['date'])
+            except Exception:
+                pass  # Keep as-is if conversion fails
+        return df, instrument_name
     except Exception:
-        return None
+        return None, instrument_name
 
 
-def create_equity_chart(df: pd.DataFrame) -> Optional[Any]:
+def create_equity_chart(df: pd.DataFrame, instrument_name: str = "Unknown") -> Optional[Any]:
     """Create Plotly equity curve chart.
 
     Creates an interactive line chart comparing Strategy equity vs Buy & Hold.
 
     Args:
-        df: DataFrame with 'strategy_equity' and 'buyhold_equity' columns.
+        df: DataFrame with 'strategy_equity', 'buyhold_equity', and optionally 'date' columns.
+        instrument_name: Name of the instrument being traded.
 
     Returns:
         Plotly Figure object, or None if Plotly not available.
@@ -52,22 +95,36 @@ def create_equity_chart(df: pd.DataFrame) -> Optional[Any]:
 
     fig = go.Figure()
 
+    # Determine x-axis: use 'date' column if available, otherwise use index
+    if 'date' in df.columns:
+        x_values = df['date']
+        x_axis_title = 'Date'
+        # Format for hover based on whether dates are datetime or not
+        if pd.api.types.is_datetime64_any_dtype(df['date']):
+            date_hover = '%{x|%Y-%m-%d}'
+        else:
+            date_hover = '%{x}'
+    else:
+        x_values = df.index
+        x_axis_title = 'Trading Day'
+        date_hover = 'Day %{x}'
+
     # Strategy equity line (blue)
     fig.add_trace(go.Scatter(
-        x=df.index,
+        x=x_values,
         y=df['strategy_equity'],
         name='Strategy',
         line=dict(color='#2196F3', width=2),
-        hovertemplate='Strategy: $%{y:,.0f}<extra></extra>'
+        hovertemplate=f'{date_hover}<br>Strategy: $%{{y:,.0f}}<extra></extra>'
     ))
 
     # Buy & Hold equity line (gray)
     fig.add_trace(go.Scatter(
-        x=df.index,
+        x=x_values,
         y=df['buyhold_equity'],
         name='Buy & Hold',
         line=dict(color='#9E9E9E', width=2),
-        hovertemplate='Buy & Hold: $%{y:,.0f}<extra></extra>'
+        hovertemplate=f'{date_hover}<br>Buy & Hold: $%{{y:,.0f}}<extra></extra>'
     ))
 
     # Add shaded region for outperformance
@@ -77,7 +134,7 @@ def create_equity_chart(df: pd.DataFrame) -> Optional[Any]:
 
     # Fill between where strategy outperforms
     fig.add_trace(go.Scatter(
-        x=list(df.index) + list(df.index[::-1]),
+        x=list(x_values) + list(x_values[::-1]),
         y=list(strategy) + list(buyhold[::-1]),
         fill='toself',
         fillcolor='rgba(76, 175, 80, 0.1)',  # Light green
@@ -86,13 +143,13 @@ def create_equity_chart(df: pd.DataFrame) -> Optional[Any]:
         hoverinfo='skip'
     ))
 
-    # Layout
+    # Layout with instrument name in title
     fig.update_layout(
         title=dict(
-            text='Strategy vs Buy & Hold Equity Curve',
+            text=f'{instrument_name} - Strategy vs Buy & Hold',
             font=dict(size=16)
         ),
-        xaxis_title='Trading Day',
+        xaxis_title=x_axis_title,
         yaxis_title='Portfolio Value ($)',
         hovermode='x unified',
         legend=dict(

@@ -171,10 +171,10 @@ def save_config(
 def refresh_equity_chart():
     """Load and create equity curve chart."""
     data_dir = Path(__file__).parent.parent / "data"
-    df = load_equity_curve(data_dir)
+    df, instrument_name = load_equity_curve(data_dir)
     if df is None:
         return create_empty_chart()
-    return create_equity_chart(df)
+    return create_equity_chart(df, instrument_name)
 
 
 def run_pipeline_handler():
@@ -260,12 +260,17 @@ def create_app():
                 # Main parameters (always visible)
                 gr.Markdown("### Main Parameters")
                 with gr.Group():
-                    with gr.Row():
-                        data_path = gr.Textbox(
-                            label="Data Source Path",
-                            scale=3,
-                            placeholder="C:/Users/jd/LTSM/data/raw/file.csv"
-                        )
+                    data_path = gr.Textbox(
+                        label="Data Source Path (enter path or use file picker below)",
+                        placeholder="C:/Users/jd/LTSM/data/raw/file.csv"
+                    )
+                    file_browser = gr.File(
+                        label="Click to browse for CSV file",
+                        file_types=[".csv"],
+                        type="filepath",
+                        file_count="single",
+                        height=80
+                    )
                     with gr.Row():
                         train_ratio = gr.Number(label="Train Ratio", value=0.80, precision=2, minimum=0.5, maximum=0.95)
                         val_ratio = gr.Number(label="Val Ratio", value=0.10, precision=2, minimum=0.05, maximum=0.25)
@@ -397,6 +402,13 @@ def create_app():
         btn_load.click(
             fn=lambda: extract_ui_values(load_current_config()) + ("Loaded current configuration",),
             outputs=all_outputs_with_status
+        )
+
+        # Wire up file browser to update data_path textbox
+        file_browser.change(
+            fn=lambda filepath: filepath if filepath else "",
+            inputs=file_browser,
+            outputs=data_path
         )
 
         # Wire up action buttons

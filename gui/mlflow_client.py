@@ -112,6 +112,47 @@ class MLflowClient:
         except Exception:
             return []
 
+    def _load_json_metrics(self) -> Dict[str, Any]:
+        """Load metrics from JSON files as fallback.
+
+        Returns:
+            Combined metrics dictionary from JSON files.
+        """
+        metrics = {}
+        data_dir = Path(__file__).parent.parent / "data" / "08_reporting"
+
+        # Load evaluation metrics
+        eval_path = data_dir / "evaluation_metrics.json"
+        if eval_path.exists():
+            try:
+                import json
+                with open(eval_path, "r") as f:
+                    eval_data = json.load(f)
+                metrics["MAE"] = eval_data.get("mae")
+                metrics["RMSE"] = eval_data.get("rmse")
+                metrics["MAPE"] = eval_data.get("mape")
+                metrics["R2"] = eval_data.get("r2")
+            except Exception:
+                pass
+
+        # Load backtest metrics
+        backtest_path = data_dir / "backtest_metrics.json"
+        if backtest_path.exists():
+            try:
+                import json
+                with open(backtest_path, "r") as f:
+                    bt_data = json.load(f)
+                metrics["total_return"] = bt_data.get("total_return")
+                metrics["sharpe_ratio"] = bt_data.get("sharpe_ratio")
+                metrics["max_drawdown"] = bt_data.get("max_drawdown")
+                metrics["win_rate"] = bt_data.get("win_rate")
+                metrics["annual_return"] = bt_data.get("annual_return")
+                metrics["total_trades"] = bt_data.get("total_trades")
+            except Exception:
+                pass
+
+        return metrics
+
     def format_metrics(self, result: Dict[str, Any]) -> str:
         """Format metrics for display.
 
@@ -128,6 +169,14 @@ class MLflowClient:
             return f"Error fetching MLflow data: {result['error']}"
 
         metrics = result.get("metrics", {})
+
+        # If no MLflow metrics, try loading from JSON files
+        if not metrics:
+            metrics = self._load_json_metrics()
+            if metrics:
+                # Update result with JSON metrics for consistent formatting
+                result["metrics"] = metrics
+
         if not metrics:
             return (
                 f"Run ID: {result.get('run_id', 'Unknown')[:8]}...\n"
